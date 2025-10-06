@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,21 +8,45 @@ import { KeywordToken } from "@/components/KeywordToken";
 import { OpportunityTable } from "@/components/OpportunityTable";
 import { AnalysisStats } from "@/components/AnalysisStats";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Link2, Target, Sparkles, AlertCircle } from "lucide-react";
-import { 
-  demoPages, 
-  demoTokensByPage, 
-  demoOpportunities,
-  demoStats 
-} from "@/lib/demoData";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Link2, Target, Sparkles } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Index = () => {
   const { toast } = useToast();
-  const [siteUrl, setSiteUrl] = useState("https://example.com");
+  const [siteUrl, setSiteUrl] = useState("");
+  const [gscProperty, setGscProperty] = useState("");
+  const [gscProperties, setGscProperties] = useState<any[]>([]);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedPage, setSelectedPage] = useState("");
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [analysisData, setAnalysisData] = useState<any>(null);
+
+  useEffect(() => {
+    loadGscProperties();
+  }, []);
+
+  const loadGscProperties = async () => {
+    setIsLoadingProperties(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-gsc-properties`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setGscProperties(data.properties || []);
+      }
+    } catch (error) {
+      console.error('Error loading GSC properties:', error);
+    } finally {
+      setIsLoadingProperties(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!siteUrl) {
@@ -34,19 +58,49 @@ const Index = () => {
       return;
     }
 
+    if (!gscProperty) {
+      toast({
+        title: "Error",
+        description: "Please select a Google Search Console property",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsAnalyzing(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setHasAnalyzed(true);
-    setSelectedPage(demoPages[0].url);
-    setIsAnalyzing(false);
-    
-    toast({
-      title: "Analysis Complete",
-      description: `Found ${demoStats.totalOpportunities} high-priority link opportunities`,
-    });
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-seo`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ siteUrl, gscProperty }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Analysis failed');
+      }
+
+      const data = await response.json();
+      setAnalysisData(data);
+      setHasAnalyzed(true);
+      setSelectedPage(data.pages[0]?.url || '');
+      
+      toast({
+        title: "Analysis Complete",
+        description: `Found ${data.stats.totalOpportunities} high-priority link opportunities`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to analyze site. Please check your API credentials.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -93,18 +147,28 @@ const Index = () => {
               </div>
             </div>
 
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Demo Mode:</strong> This is a demonstration with sample data. 
-                To analyze your own site, you'll need to connect Firecrawl, DataForSEO, and Google Search Console APIs.
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="gscProperty" className="text-sm font-medium mb-2">
+                  Google Search Console Property
+                </Label>
+                <Select value={gscProperty} onValueChange={setGscProperty} disabled={isAnalyzing || isLoadingProperties}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={isLoadingProperties ? "Loading properties..." : "Select a property"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gscProperties.map((prop) => (
+                      <SelectItem key={prop.siteUrl} value={prop.siteUrl}>
+                        {prop.siteUrl}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1">
+              <div>
                 <Label htmlFor="siteUrl" className="text-sm font-medium mb-2">
-                  Site URL
+                  Site URL to Crawl
                 </Label>
                 <Input
                   id="siteUrl"
@@ -116,6 +180,7 @@ const Index = () => {
                   disabled={isAnalyzing}
                 />
               </div>
+
               <div className="flex items-end">
                 <Button 
                   onClick={handleAnalyze}
@@ -141,10 +206,10 @@ const Index = () => {
         </Card>
 
         {/* Results */}
-        {hasAnalyzed && (
+        {hasAnalyzed && analysisData && (
           <>
             {/* Stats */}
-            <AnalysisStats {...demoStats} />
+            <AnalysisStats {...analysisData.stats} />
 
             {/* Tabs */}
             <Tabs defaultValue="keywords" className="space-y-6">
@@ -162,25 +227,25 @@ const Index = () => {
                   <Label htmlFor="pageSelect" className="text-sm font-medium mb-2">
                     Select Source Page
                   </Label>
-                  <select
-                    id="pageSelect"
-                    value={selectedPage}
-                    onChange={(e) => setSelectedPage(e.target.value)}
-                    className="w-full mt-2 px-3 py-2 rounded-md border border-input bg-background text-foreground"
-                  >
-                    {demoPages.map((page) => (
-                      <option key={page.url} value={page.url}>
-                        {page.title}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={selectedPage} onValueChange={setSelectedPage}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue placeholder="Choose a page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {analysisData.pages.map((page: any) => (
+                        <SelectItem key={page.url} value={page.url}>
+                          {page.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Card>
 
                 <div className="space-y-3">
                   <h3 className="text-lg font-semibold text-foreground">
                     Extracted Keywords (TF-IDF Tokenization)
                   </h3>
-                  {selectedPage && demoTokensByPage[selectedPage]?.map((token, index) => (
+                  {selectedPage && analysisData.keywordsByPage[selectedPage]?.map((token: any, index: number) => (
                     <KeywordToken 
                       key={index} 
                       token={token} 
@@ -204,7 +269,7 @@ const Index = () => {
                     These recommendations are calculated using keyword score × page score = priority. 
                     Higher priority = more traffic impact.
                   </p>
-                  <OpportunityTable opportunities={demoOpportunities} />
+                  <OpportunityTable opportunities={analysisData.opportunities} />
                 </div>
               </TabsContent>
             </Tabs>

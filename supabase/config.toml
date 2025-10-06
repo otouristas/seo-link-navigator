@@ -1,1 +1,7 @@
 project_id = "gfuhchqxaqcsofapitwd"
+
+[functions.analyze-seo]
+verify_jwt = false
+
+[functions.list-gsc-properties]
+verify_jwt = false
