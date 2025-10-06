@@ -8,7 +8,7 @@ import { KeywordToken } from "@/components/KeywordToken";
 import { OpportunityTable } from "@/components/OpportunityTable";
 import { AnalysisStats } from "@/components/AnalysisStats";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Link2, Target, Sparkles, LogOut } from "lucide-react";
+import { Loader as Loader2, Link2, Target, Sparkles, LogOut } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 
