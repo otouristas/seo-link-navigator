@@ -1,27 +1,31 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   try {
-    const GSC_ACCESS_TOKEN = Deno.env.get('GSC_ACCESS_TOKEN');
-    
-    if (!GSC_ACCESS_TOKEN) {
-      throw new Error('GSC_ACCESS_TOKEN not configured');
+    const { accessToken } = await req.json();
+
+    if (!accessToken) {
+      throw new Error('Google access token is required');
     }
 
     console.log('Fetching GSC properties...');
-    
+
     const response = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
       headers: {
-        'Authorization': `Bearer ${GSC_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
     });
@@ -37,13 +41,24 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ properties: data.siteEntry || [] }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
     );
   } catch (error) {
     console.error('Error fetching GSC properties:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
     );
   }
 });

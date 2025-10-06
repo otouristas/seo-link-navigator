@@ -1,8 +1,9 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
 interface TokenScore {
@@ -72,20 +73,26 @@ class TFIDFCalculator {
   }
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   try {
-    const { siteUrl, gscProperty } = await req.json();
-    
+    const { siteUrl, gscProperty, accessToken } = await req.json();
+
+    if (!accessToken) {
+      throw new Error('Google access token is required');
+    }
+
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     const DATAFORSEO_USERNAME = Deno.env.get('DATAFORSEO_USERNAME');
     const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD');
-    const GSC_ACCESS_TOKEN = Deno.env.get('GSC_ACCESS_TOKEN');
 
-    if (!FIRECRAWL_API_KEY || !DATAFORSEO_USERNAME || !DATAFORSEO_PASSWORD || !GSC_ACCESS_TOKEN) {
+    if (!FIRECRAWL_API_KEY || !DATAFORSEO_USERNAME || !DATAFORSEO_PASSWORD) {
       throw new Error('Missing required API credentials');
     }
 
@@ -195,7 +202,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${GSC_ACCESS_TOKEN}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -331,13 +338,24 @@ serve(async (req) => {
         stats,
         pages: pages.map(p => ({ url: p.url, title: p.title || p.url })),
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
     );
   } catch (error) {
     console.error('Error in analyze-seo:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
     );
   }
 });
